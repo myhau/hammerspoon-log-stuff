@@ -23,6 +23,9 @@ function openHistory(name)
 end
 
 function writeHistory(file, data)
+    if data == nil then
+        return
+    end
     local time = os.time()
     file:write(time .. " " .. data .. "\n")
 end
@@ -32,7 +35,8 @@ local keyFile = openHistory("key")
 local wifiFile = openHistory("wifi")
 local itunesHistory = openHistory("itunes")
 local spotifyHistory = openHistory("spotify")
-local appEventsHistory = openHistory("application")
+local windowHistory = openHistory("window")
+local appHistory = openHistory("application")
 
 local keyEvents = hs.eventtap.new({ hs.eventtap.event.types.keyDown },
     function(event)
@@ -48,7 +52,7 @@ local keyEvents = hs.eventtap.new({ hs.eventtap.event.types.keyDown },
     end)
 keyEvents:start()
 
-applcationEventMap = {
+applicationEventMap = {
     [hs.application.watcher.activated] = "activated",
     [hs.application.watcher.deactivated] = "deactivated",
     [hs.application.watcher.hidden] = "hidden",
@@ -58,23 +62,41 @@ applcationEventMap = {
     [hs.application.watcher.unhidden] = "unhidden",
 }
 
-applicationsWatcher = hs.application.watcher.new(function(name, type, _app)
-    hs.timer.doAfter(1, function() writeHistory(appEventsHistory, name .. " " .. applcationEventMap[type]) end)
+applicationsWatcher = hs.application.watcher.new(function(name, type, app)
+    local title = ""
+    local windowTitle = ""
+    if app ~= nil then
+        title = app:title()
+        if title == nil then
+            title = "nil"
+        end
+        local focusedWindow = app:focusedWindow()
+        if focusedWindow ~= nil then
+            windowTitle = focusedWindow:title()
+        end
+    end
+    hs.timer.doAfter(1, function() writeHistory(appHistory, "[" .. name .. " - " .. title .. "] " .. " [" .. windowTitle .. "] [" .. applicationEventMap[type] .. "]") end)
 end)
 
 applicationsWatcher:start()
 
+
+local filter = hs.window.filter.new(true)
+filter:subscribe({ hs.window.filter.windowFocused, hs.window.filter.windowCreated, hs.window.filter.windowTitleChanged },
+    (function(window, applicationName)
+        writeHistory(windowHistory, "[" .. applicationName .. "] [" .. window:title() .. "]")
+    end),
+    true)
+
 wifiWatcher = hs.wifi.watcher.new(function()
-    local currentNetwork
-    if hs.wifi.currentNetwork() == nil then
-        currentNetwork = "[]"
-    else
-        currentNetwork = "[" .. hs.wifi.currentNetwork() .. "]"
+    local currentNetwork = ""
+    if hs.wifi.currentNetwork() ~= nil then
+        currentNetwork = hs.wifi.currentNetwork()
     end
     local allNetworks = table.concat(hs.wifi.availableNetworks(), ',')
 
     hs.timer.doAfter(1, function()
-        local networks = currentNetwork .. " " .. allNetworks
+        local networks = "[" .. currentNetwork .. "] [" .. allNetworks .. "]"
         writeHistory(wifiFile, networks)
     end)
 end)
@@ -88,8 +110,11 @@ playbackStateMap = {
     [hs.itunes.state_playing] = "playing"
 }
 function getTrackInfo(itunesOrSpotify)
-
-    return "[" .. playbackStateMap[itunesOrSpotify.getPlaybackState()] .. "] " .. itunesOrSpotify.getCurrentAlbum() .. " " .. itunesOrSpotify.getCurrentArtist() .. " - " .. itunesOrSpotify.getCurrentTrack()
+    local playbackState = itunesOrSpotify.getPlaybackState()
+    if playbackState == nil or playbackStateMap[playbackState] == "stopped" then
+        return nil
+    end
+    return "[" .. playbackStateMap[itunesOrSpotify.getPlaybackState()] .. "] [" .. itunesOrSpotify.getCurrentAlbum() .. " " .. itunesOrSpotify.getCurrentArtist() .. " - " .. itunesOrSpotify.getCurrentTrack() .. "]"
 end
 
 hs.timer.doEvery(PERIODICAL_STUFF_INTERVAL_SECONDS, function()
