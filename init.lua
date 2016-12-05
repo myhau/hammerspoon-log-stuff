@@ -128,3 +128,10 @@ hs.timer.doEvery(PERIODICAL_STUFF_INTERVAL_SECONDS, function()
         writeHistory(spotifyHistory, spotify)
     end)
 end)
+
+
+
+hs.hotkey.bind({"cmd", "shift"}, "space", "", nil, function()
+    print("asd")
+    hs.hints.windowHints()
+end)
